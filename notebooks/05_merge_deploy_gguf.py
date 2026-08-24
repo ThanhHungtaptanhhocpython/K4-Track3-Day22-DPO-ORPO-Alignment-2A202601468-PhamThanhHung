@@ -126,10 +126,10 @@ print(f"Saved GGUF Q4_K_M to {GGUF_DIR}")
 # ### 3a. Optional — additional quantization tiers (for the +3 rigor add-on)
 
 # %%
-# Uncomment if you want Q5_K_M + Q8_0 too (~2× total disk space).
-# Each adds ~30s for an extra GGUF file.
-#
-# model.save_pretrained_gguf(str(GGUF_DIR), tokenizer, quantization_method="q5_k_m")
+# Q5_K_M enabled by default — required for the "+3 GGUF release published" rigor
+# add-on (rubric wants Q4_K_M + Q5_K_M minimum). Add Q8_0 below if you want more
+# (~2x total disk space, adds ~30s per extra file).
+model.save_pretrained_gguf(str(GGUF_DIR), tokenizer, quantization_method="q5_k_m")
 # model.save_pretrained_gguf(str(GGUF_DIR), tokenizer, quantization_method="q8_0")
 
 # %%
