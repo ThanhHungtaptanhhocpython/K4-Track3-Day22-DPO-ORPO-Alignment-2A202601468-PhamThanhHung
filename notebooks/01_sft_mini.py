@@ -41,7 +41,7 @@ else:  # BIGGPU
     PER_DEVICE_BATCH = 2
     GRAD_ACCUM = 4
 
-SFT_DATASET = os.environ.get("SFT_DATASET", "5CD-AI/Vietnamese-alpaca-cleaned")
+SFT_DATASET = os.environ.get("SFT_DATASET", "5CD-AI/Vietnamese-alpaca-gpt4-gg-translated")
 SFT_SLICE = 1000
 NUM_EPOCHS = 1
 
@@ -117,22 +117,24 @@ print(f"Loaded {len(ds)} rows. Columns: {ds.column_names}")
 print(f"\nFirst row:\n{ds[0]}")
 
 # %%
-# Alpaca → ChatML format (Qwen2.5's native template)
+# Alpaca → ChatML format (Qwen2.5's native template).
+# Handles both schemas: classic alpaca (`instruction/input/output`) and
+# 5CD-AI gpt4-translated (`instruction_vi/input_vi/output_vi` + `_en` mirrors).
 def format_alpaca_to_chat(row):
-    messages = []
-    if row.get("instruction"):
-        prompt = row["instruction"]
-        if row.get("input"):
-            prompt += "\n\n" + row["input"]
-        messages.append({"role": "user", "content": prompt})
-    if row.get("output"):
-        messages.append({"role": "assistant", "content": row["output"]})
+    instruction = row.get("instruction") or row.get("instruction_vi")
+    inp = row.get("input") or row.get("input_vi") or ""
+    output = row.get("output") or row.get("output_vi")
+    if not instruction or not output:
+        return {"text": ""}
+    messages = [{"role": "user", "content": f"{instruction}\n\n{inp}".strip()}]
+    messages.append({"role": "assistant", "content": output})
     text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
     return {"text": text}
 
 
 ds_formatted = ds.map(format_alpaca_to_chat, remove_columns=ds.column_names)
-print(f"\nSample formatted text (first 500 chars):\n{ds_formatted[0]['text'][:500]}")
+ds_formatted = ds_formatted.filter(lambda r: r["text"] != "")
+print(f"\nFormatted {len(ds_formatted)} rows (dropped empty). Sample (first 500 chars):\n{ds_formatted[0]['text'][:500]}")
 
 # %% [markdown]
 # ## 3. Train SFT-mini
