@@ -1,6 +1,6 @@
 # Reflection — Lab 22 (DPO/ORPO Alignment)
 
-**Tên:** Pham Thanh Hung
+**Tên:** PHẠM THANH HƯNG - 2A202601468
 **Cohort:** K4
 **Tier đã chạy:** T4
 **Date:** 2026-08-24
