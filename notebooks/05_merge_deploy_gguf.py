@@ -53,41 +53,33 @@ import torch
 assert torch.cuda.is_available()
 
 # %% [markdown]
-# ## 1. Load DPO model + merge adapter
+# ## 1. Load the aligned model
+#
+# > **Quan trọng:** adapter DPO từ NB3 được khởi tạo từ weights SFT LoRA rồi cập nhật
+# > tiếp trong DPO — nó chứa **toàn bộ delta aligned** (SFT + DPO). Load thẳng adapter
+# > này là đủ; không cần (và không nên) stack thêm adapter SFT bên dưới.
 
 # %%
 from unsloth import FastLanguageModel
-from peft import PeftModel
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name=BASE_MODEL,
+    model_name=str(DPO_PATH),
     max_seq_length=MAX_LEN,
     dtype=None,
     load_in_4bit=True,
 )
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
-
-# Stack SFT-mini → DPO adapters
-SFT_PATH = REPO_ROOT / "adapters" / "sft-mini"
-model = PeftModel.from_pretrained(model, str(SFT_PATH))
-print(f"Loaded SFT-mini adapter from {SFT_PATH}")
-
-# %% [markdown]
-# > **Note:** The DPO adapter trained in NB3 stacks on top of SFT. To get a fully
-# > aligned merged model, we apply both adapters before merging. Unsloth's
-# > `save_pretrained_merged` handles the SFT + DPO + base merge in one shot.
+print(f"Loaded aligned LoRA from {DPO_PATH}")
 
 # %% [markdown]
 # ## 2. Save merged FP16 weights
 #
-# `save_pretrained_merged(method="merged_16bit")` produces a HuggingFace-format
-# directory you can either upload to HF Hub directly OR feed into the GGUF
-# converter in step 3.
+# `save_pretrained_merged(method="merged_16bit")` bakes the aligned LoRA into the
+# base weights and produces a HuggingFace-format directory you can either upload
+# to HF Hub directly OR feed into the GGUF converter in step 3.
 
 # %%
-# This re-loads the model with both SFT and DPO adapters merged into base weights.
-# Output is FP16 (or BF16 on Ampere+) HF-format weights ready for inference.
 model.save_pretrained_merged(
     str(MERGED_PATH),
     tokenizer,

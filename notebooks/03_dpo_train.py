@@ -77,11 +77,13 @@ assert torch.cuda.is_available(), "DPO needs a CUDA GPU. See HARDWARE-GUIDE.md."
 
 # %%
 from unsloth import FastLanguageModel
-from peft import PeftModel
 
-# Policy — gets new DPO LoRA adapter on top of SFT LoRA
+# Policy — resume directly from the SFT checkpoint. Passing the adapter
+# directory makes Unsloth load the 4-bit base AND re-attach the SFT LoRA
+# weights (trainable) in one call — the documented way to continue training
+# from a saved adapter. No manual PeftModel stacking needed.
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name=BASE_MODEL,
+    model_name=str(SFT_PATH),
     max_seq_length=MAX_LEN,
     dtype=None,
     load_in_4bit=True,
@@ -89,29 +91,8 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Load SFT adapter on top of base
-model = PeftModel.from_pretrained(model, str(SFT_PATH), is_trainable=True)
-print(f"Policy: {model.__class__.__name__} with SFT adapter loaded")
-
-# %%
-# Wrap policy with NEW LoRA adapter for DPO updates (don't merge SFT — keep stacked)
-# Unsloth re-applies LoRA on top of the existing PeftModel.
-model = FastLanguageModel.get_peft_model(
-    model,
-    r=16,
-    lora_alpha=32,
-    lora_dropout=0.0,
-    bias="none",
-    target_modules=[
-        "q_proj", "k_proj", "v_proj", "o_proj",
-        "gate_proj", "up_proj", "down_proj",
-    ],
-    use_gradient_checkpointing="unsloth",
-    random_state=42,
-    use_rslora=False,
-    loftq_config=None,
-)
-print(f"Trainable params (DPO LoRA): {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
+print(f"Policy: 4-bit base + SFT LoRA resumed from {SFT_PATH}")
+print(f"Trainable params (LoRA): {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
 
 # %% [markdown]
 # > **Why no separate `ref_model=` argument?** Modern TRL (≥ 0.12) auto-detects
@@ -266,6 +247,10 @@ if chosen_col and rejected_col and len(logs) >= 5:
 
 # %% [markdown]
 # ## 6. Save adapter
+#
+# > **Lưu ý:** adapter DPO này được khởi tạo từ weights của SFT LoRA rồi cập nhật
+# > tiếp trong quá trình DPO — tức nó chứa **toàn bộ delta aligned** (SFT + DPO).
+# > NB4 và NB5 vì vậy chỉ cần load đúng 1 adapter này, không cần stack SFT bên dưới.
 
 # %%
 trainer.model.save_pretrained(str(DPO_OUT))

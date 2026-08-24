@@ -49,24 +49,19 @@ def main():
 
     import torch
     from datasets import Dataset
-    from peft import PeftModel
     from trl import DPOConfig, DPOTrainer
     from unsloth import FastLanguageModel
 
+    # Resume directly from the SFT checkpoint — Unsloth loads the 4-bit base
+    # and re-attaches the SFT LoRA weights (trainable) in one call.
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=base_model, max_seq_length=max_len, dtype=None, load_in_4bit=True,
+        model_name=str(Path(args.sft_path)),
+        max_seq_length=max_len,
+        dtype=None,
+        load_in_4bit=True,
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    model = PeftModel.from_pretrained(model, args.sft_path, is_trainable=True)
-    model = FastLanguageModel.get_peft_model(
-        model, r=16, lora_alpha=32, lora_dropout=0.0, bias="none",
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                        "gate_proj", "up_proj", "down_proj"],
-        use_gradient_checkpointing="unsloth",
-        random_state=42, use_rslora=False, loftq_config=None,
-    )
 
     config = DPOConfig(
         output_dir=str(output.parent / f"{output.name}-checkpoints"),
