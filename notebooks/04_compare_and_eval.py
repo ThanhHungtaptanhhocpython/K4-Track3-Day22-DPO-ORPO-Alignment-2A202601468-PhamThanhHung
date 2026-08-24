@@ -340,6 +340,14 @@ if judge_results is None:
     json.dumps(judge_results, ensure_ascii=False, indent=2)
 )
 
+# Print verbatim verdicts — screenshot these for submission/screenshots/05-judge-output.png
+print("\n" + "=" * 60)
+print("PER-PROMPT VERDICTS")
+print("=" * 60)
+for r in judge_results:
+    print(f"\n#{r['id']} [{r['category']}]  winner = {r['winner'].upper()}")
+    print(f"   {r['justification']}")
+
 # %% [markdown]
 # ## 6. Win/loss/tie summary
 
