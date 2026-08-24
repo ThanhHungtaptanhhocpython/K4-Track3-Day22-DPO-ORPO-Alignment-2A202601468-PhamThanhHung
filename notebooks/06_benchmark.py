@@ -158,7 +158,8 @@ torch.cuda.empty_cache()
 # Mini AlpacaEval 2 LC. 100 prompts, generate from both adapters, judge with gpt-4o-mini or
 # claude-haiku. Pure preference-style — closest in spirit to what DPO trained on.
 #
-# Falls back to "skipped" if no API key. Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` to enable.
+# Falls back to "skipped" if no API key. Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+# or `OPENROUTER_API_KEY` to enable.
 
 # %%
 from datasets import load_dataset
@@ -256,13 +257,35 @@ def judge_pair(a, b, prompt):
             return json.loads(resp.content[0].text)
         except Exception:
             return {"winner": "tie", "reason": "parse error"}
+    elif os.environ.get("OPENROUTER_API_KEY"):
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=os.environ["OPENROUTER_API_KEY"],
+            base_url="https://openrouter.ai/api/v1",
+        )
+        judge_model = os.environ.get("JUDGE_MODEL", "openai/gpt-4o-mini")
+        if "/" not in judge_model:
+            judge_model = f"openai/{judge_model}"
+        resp = client.chat.completions.create(
+            model=judge_model,
+            messages=[{"role": "user", "content": JUDGE_PROMPT.format(prompt=prompt, a=a, b=b)}],
+            temperature=0,
+        )
+        try:
+            return json.loads(resp.choices[0].message.content)
+        except Exception:
+            return {"winner": "tie", "reason": "parse error"}
     return None
 
 
 # %%
 import random
 
-if alpaca_prompts and (os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")):
+if alpaca_prompts and (
+    os.environ.get("OPENAI_API_KEY")
+    or os.environ.get("ANTHROPIC_API_KEY")
+    or os.environ.get("OPENROUTER_API_KEY")
+):
     print(f">>> Generating SFT-only on {len(alpaca_prompts)} AlpacaEval-lite prompts")
     sft_outputs = generate_with_adapter(SFT_PATH, alpaca_prompts)
     print(f">>> Generating SFT+DPO")
@@ -293,7 +316,7 @@ if alpaca_prompts and (os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHR
         json.dumps(judgments, ensure_ascii=False, indent=2)
     )
 else:
-    print("⚠ No API key set, skipping AlpacaEval-lite. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.")
+    print("⚠ No API key set, skipping AlpacaEval-lite. Set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENROUTER_API_KEY.")
     alpaca_winrate = None
 
 # %% [markdown]

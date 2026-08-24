@@ -254,6 +254,40 @@ def judge_with_openai(rows):
     return results
 
 
+def judge_with_openrouter(rows):
+    """OpenRouter exposes an OpenAI-compatible API — same call shape, different base_url."""
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return None
+    client = OpenAI(
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        base_url="https://openrouter.ai/api/v1",
+    )
+    # Model names on OpenRouter use provider/model format, e.g. openai/gpt-4o-mini.
+    judge_model = os.environ.get("JUDGE_MODEL", "openai/gpt-4o-mini")
+    if "/" not in judge_model:
+        judge_model = f"openai/{judge_model}"
+    results = []
+    for p, sft, dpo in zip(EVAL_PROMPTS, sft_outputs, dpo_outputs):
+        msg = JUDGE_PROMPT_TEMPLATE.format(
+            prompt=p["prompt"], category=p["category"], sft=sft, dpo=dpo
+        )
+        resp = client.chat.completions.create(
+            model=judge_model,
+            messages=[{"role": "user", "content": msg}],
+            temperature=0,
+        )
+        try:
+            parsed = json.loads(resp.choices[0].message.content)
+        except json.JSONDecodeError:
+            parsed = {"winner": "tie", "justification": resp.choices[0].message.content[:200]}
+        parsed["id"] = p["id"]
+        parsed["category"] = p["category"]
+        results.append(parsed)
+    return results
+
+
 def judge_with_anthropic(rows):
     try:
         from anthropic import Anthropic
@@ -289,6 +323,9 @@ if os.environ.get("OPENAI_API_KEY"):
 elif os.environ.get("ANTHROPIC_API_KEY"):
     print("Found ANTHROPIC_API_KEY — running claude-haiku judge")
     judge_results = judge_with_anthropic(rows)
+elif os.environ.get("OPENROUTER_API_KEY"):
+    print("Found OPENROUTER_API_KEY — running judge via OpenRouter")
+    judge_results = judge_with_openrouter(rows)
 
 if judge_results is None:
     print("No API keys set. Falling back to manual rubric mode.")
